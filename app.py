@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
 from flask_sqlalchemy import SQLAlchemy
@@ -8,15 +9,22 @@ from functools import wraps
 # 创建应用
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-# 处理 PostgreSQL URL (railway 提供的 URL 格式是 postgres://，需要转换为 postgresql://)
+
+# 数据库连接配置
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///blog.db')
+# Railway 提供的 PostgreSQL URL 格式是 postgres://，SQLAlchemy 2.0 需要 postgresql://
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# 连接池配置（PostgreSQL 专用）
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
 
-# 初始化数据库
-db = SQLAlchemy(app)
+# 初始化数据库（延迟绑定，先定义模型再创建表）
+db = SQLAlchemy()
 
 # 东八区时间
 CN_TIMEZONE = timezone(timedelta(hours=8))
@@ -292,32 +300,38 @@ def user_list():
 # 初始化数据库命令
 @app.cli.command('init-db')
 def init_db_command():
-    db.create_all()
-    
-    # 创建默认管理员账户
-    admin = User.query.filter_by(username='admin').first()
-    if not admin:
-        admin = User(username='admin', email='admin@example.com', is_admin=True)
-        admin.set_password('admin123')
-        db.session.add(admin)
-        db.session.commit()
-        print('数据库初始化完成！')
-        print('默认管理员账户：admin / admin123')
-    else:
-        print('数据库已存在')
+    init_database()
 
-# 创建数据库表和管理员账户（在应用上下文中）
+# 数据库初始化函数
+def init_database():
+    """创建数据库表和默认管理员账户"""
+    try:
+        db.create_all()
+        print('[INIT] 数据库表创建成功')
+        
+        # 自动创建默认管理员账户
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User(username='admin', email='admin@example.com', is_admin=True)
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+            print('[INIT] 默认管理员账户创建成功: admin / admin123')
+        else:
+            print('[INIT] 管理员账户已存在')
+    except Exception as e:
+        print(f'[INIT] 数据库初始化错误: {e}')
+        # 如果连接失败，打印当前数据库 URL 帮助排查
+        db_url_display = os.environ.get('DATABASE_URL', 'sqlite:///blog.db')
+        print(f'[INIT] 当前 DATABASE_URL: {db_url_display[:30]}...')
+        raise
+
+# 绑定数据库到应用，并执行初始化
+db.init_app(app)
+
+# 在应用上下文中初始化数据库
 with app.app_context():
-    db.create_all()
-    
-    # 自动创建默认管理员账户
-    admin = User.query.filter_by(username='admin').first()
-    if not admin:
-        admin = User(username='admin', email='admin@example.com', is_admin=True)
-        admin.set_password('admin123')
-        db.session.add(admin)
-        db.session.commit()
-        print('[INIT] 默认管理员账户创建成功: admin / admin123')
+    init_database()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

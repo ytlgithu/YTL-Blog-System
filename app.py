@@ -300,15 +300,26 @@ def user_list():
 # 初始化数据库命令
 @app.cli.command('init-db')
 def init_db_command():
-    init_database()
+    db.create_all()
+    # 创建默认管理员账户
+    admin = User.query.filter_by(username='admin').first()
+    if not admin:
+        admin = User(username='admin', email='admin@example.com', is_admin=True)
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
+        print('数据库初始化完成！')
+        print('默认管理员账户：admin / admin123')
+    else:
+        print('数据库已存在')
 
-# 数据库初始化函数
-def init_database():
-    """创建数据库表和默认管理员账户"""
+# 绑定数据库到应用
+db.init_app(app)
+
+# 在应用上下文中初始化数据库
+with app.app_context():
     try:
         db.create_all()
-        print('[INIT] 数据库表创建成功')
-        
         # 自动创建默认管理员账户
         admin = User.query.filter_by(username='admin').first()
         if not admin:
@@ -317,32 +328,8 @@ def init_database():
             db.session.add(admin)
             db.session.commit()
             print('[INIT] 默认管理员账户创建成功: admin / admin123')
-        else:
-            print('[INIT] 管理员账户已存在')
     except Exception as e:
         print(f'[INIT] 数据库初始化错误: {e}')
-        # 如果连接失败，打印当前数据库 URL 帮助排查
-        db_url_display = os.environ.get('DATABASE_URL', 'sqlite:///blog.db')
-        print(f'[INIT] 当前 DATABASE_URL: {db_url_display[:30]}...')
-        raise
-
-# 绑定数据库到应用
-db.init_app(app)
-
-# 使用 before_first_request 延迟初始化（Flask 2.x 兼容）
-# 在 Flask 3.0+ 使用 before_request + 标志位
-_db_initialized = False
-
-@app.before_request
-def init_db_on_first_request():
-    global _db_initialized
-    if _db_initialized:
-        return
-    _db_initialized = True
-    try:
-        init_database()
-    except Exception as e:
-        print(f'[INIT] 首次请求时数据库初始化失败: {e}')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

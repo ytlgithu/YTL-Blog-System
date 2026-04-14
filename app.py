@@ -8,7 +8,11 @@ from functools import wraps
 # 创建应用
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///blog.db')
+# 处理 PostgreSQL URL (railway 提供的 URL 格式是 postgres://，需要转换为 postgresql://)
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///blog.db')
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # 初始化数据库

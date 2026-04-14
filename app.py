@@ -326,12 +326,23 @@ def init_database():
         print(f'[INIT] 当前 DATABASE_URL: {db_url_display[:30]}...')
         raise
 
-# 绑定数据库到应用，并执行初始化
+# 绑定数据库到应用
 db.init_app(app)
 
-# 在应用上下文中初始化数据库
-with app.app_context():
-    init_database()
+# 使用 before_first_request 延迟初始化（Flask 2.x 兼容）
+# 在 Flask 3.0+ 使用 before_request + 标志位
+_db_initialized = False
+
+@app.before_request
+def init_db_on_first_request():
+    global _db_initialized
+    if _db_initialized:
+        return
+    _db_initialized = True
+    try:
+        init_database()
+    except Exception as e:
+        print(f'[INIT] 首次请求时数据库初始化失败: {e}')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

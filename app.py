@@ -23,8 +23,8 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_recycle': 300,
 }
 
-# 初始化数据库（延迟绑定，先定义模型再创建表）
-db = SQLAlchemy()
+# 初始化数据库（Flask-SQLAlchemy 2.x 方式）
+db = SQLAlchemy(app)
 
 # 东八区时间
 CN_TIMEZONE = timezone(timedelta(hours=8))
@@ -312,9 +312,6 @@ def init_db_command():
         print('默认管理员账户：admin / admin123')
     else:
         print('数据库已存在')
-
-# 绑定数据库到应用
-db.init_app(app)
 
 # 在应用上下文中初始化数据库
 with app.app_context():
